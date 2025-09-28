@@ -1,7 +1,8 @@
-# Custom CSS Formatter for VSCode
+# 969 DESIGN - CSS Formatter for VSCode
 
 969.CSS-formatter.
 This is a custom CSS formatter for VSCode that preserves blank lines and ensures single-property rules remain inline.
+It works just fine with @layers and crazy comments everywhere.
 
 ## Features
 ✔ Preserve blank lines  
@@ -20,3 +21,4 @@ Open any CSS file and use **Format Document (Shift + Alt + F)**.
 
 ## License
 MIT
+

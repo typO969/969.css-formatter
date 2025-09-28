@@ -1,5 +1,5 @@
 {
-  "name": "NSN-custom-css-formatter",
+  "name": "nsn-custom-css-formatter",
   "displayName": "Custom CSS Formatter",
   "version": "1.7.2",
   "description": "A custom CSS formatter with enhanced spacing and line preservation.",
@@ -37,7 +37,7 @@
     ],
     "configurationDefaults": {
       "[css]": {
-        "editor.defaultFormatter": "typo969.NSN-custom-css-formatter"
+        "editor.defaultFormatter": "vscode.css-language-features"
       }
     }
   },
@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@types/js-beautify": "^1.14.3",
-    "@types/vscode": "^1.98.0",
+    "@types/vscode": "^1.104.0",
     "typescript": "^5.7.2"
   },
   "dependencies": {

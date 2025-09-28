@@ -36,10 +36,82 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.format = format;
 const vscode = __importStar(require("vscode"));
 const js_beautify_1 = require("js-beautify");
+function collapseSingleDeclarationBlocks(css) {
+    const lines = css.split('\n');
+    const output = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const openBraceIndex = line.indexOf('{');
+        if (openBraceIndex !== -1 && !line.trim().startsWith('@')) {
+            const bodyLines = [];
+            let closingLineIndex = -1;
+            let nestedBlockDetected = false;
+            for (let j = i + 1; j < lines.length; j++) {
+                const currentLine = lines[j];
+                if (currentLine.indexOf('{') !== -1) {
+                    nestedBlockDetected = true;
+                    break;
+                }
+                if (currentLine.indexOf('}') !== -1) {
+                    closingLineIndex = j;
+                    break;
+                }
+                bodyLines.push(currentLine);
+            }
+            if (!nestedBlockDetected && closingLineIndex !== -1) {
+                const bodyWithoutComments = bodyLines
+                    .map(l => l.replace(/\/\*[\s\S]*?\*\//g, '').trim())
+                    .filter(Boolean)
+                    .join(' ');
+                const declarationCount = bodyWithoutComments
+                    .split(';')
+                    .map(part => part.trim())
+                    .filter(part => part.length > 0).length;
+                if (declarationCount === 1) {
+                    const propertyText = bodyLines
+                        .map(l => l.trim())
+                        .filter(l => l.length > 0)
+                        .join(' ');
+                    if (propertyText.length > 0) {
+                        const collapsedLine = line.replace(/\{\s*$/, '{ ') + propertyText + ' }';
+                        output.push(collapsedLine);
+                        i = closingLineIndex;
+                        continue;
+                    }
+                }
+            }
+        }
+        output.push(line);
+    }
+    return output.join('\n');
+}
+function keepInlineCommentsOnSameLine(css, inlineCommentCounts) {
+    const shouldInline = (comment) => {
+        const key = comment.trim();
+        const current = inlineCommentCounts.get(key);
+        if (current && current > 0) {
+            inlineCommentCounts.set(key, current - 1);
+            return true;
+        }
+        return false;
+    };
+    let result = css.replace(/;[ \t]*\n[ \t]*(\/\*[^\n]*\*\/)/g, (match, comment) => shouldInline(comment) ? `; ${comment}` : match);
+    result = result.replace(/}[ \t]*\n(?:[ \t]*\n)?[ \t]*(\/\*[^\n]*\*\/)/g, (match, comment) => (shouldInline(comment) ? `} ${comment}` : match));
+    return result;
+}
+function limitConsecutiveReturns(css, maxReturns = 3) {
+    if (maxReturns < 1) {
+        return css;
+    }
+    const pattern = new RegExp(`(\\n[ \t]*){${maxReturns + 1},}`, 'g');
+    const replacement = '\n'.repeat(maxReturns);
+    return css.replace(pattern, replacement);
+}
 function format(document, range, options) {
     let value = document.getText();
     let includesEnd = true;
     let tabSize = options.get("tabSize", 4);
+    const inlineCommentCounts = collectInlineCommentCounts(value);
     if (range) {
         let startOffset = document.offsetAt(range.start);
         let endOffset = document.offsetAt(range.end);
@@ -56,18 +128,31 @@ function format(document, range, options) {
         indent_char: options.get("insertSpaces", true) ? ' ' : '\t',
         end_with_newline: includesEnd && options.get("insertFinalNewline", false),
         //selector_separator_newline: options.get<boolean>("newlineBetweenSelectors", true),
-        //newline_between_rules: options.get<boolean>("newlineBetweenRules", true),
+        newline_between_rules: false,
         //space_around_selector_separator: options.get<boolean>("spaceAroundSelectorSeparator", false),
         brace_style: 'collapse,preserve-inline', // Collapse blocks but keep inline rules intact
         indent_empty_lines: options.get("indentEmptyLines", false),
-        max_preserve_newlines: 2, // Preserve up to 2 blank lines
+        max_preserve_newlines: 10, // Allow runs for custom clamping
         preserve_newlines: true, // Always preserve newlines
         wrap_line_length: options.get("wrapLineLength", 0),
         eol: '\n'
     };
     let result = (0, js_beautify_1.css)(value, cssOptions);
+    result = collapseSingleDeclarationBlocks(result);
+    result = keepInlineCommentsOnSameLine(result, inlineCommentCounts);
+    result = limitConsecutiveReturns(result);
     return [{
             range: range,
             newText: result
         }];
+}
+function collectInlineCommentCounts(source) {
+    const counts = new Map();
+    const inlineCommentRegex = /([;}])[ \t]*(\/\*[^\n]*\*\/)/g;
+    let match;
+    while ((match = inlineCommentRegex.exec(source)) !== null) {
+        const comment = match[2].trim();
+        counts.set(comment, (counts.get(comment) ?? 0) + 1);
+    }
+    return counts;
 }

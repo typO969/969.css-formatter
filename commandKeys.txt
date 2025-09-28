@@ -1,0 +1,6 @@
+RELOADING DEV SPACE IN VSCODE AFTER MAKING CHANGES:
+	Ctrl + shift + p, then reload
+ 
+ 
+RUNNING FORMATTER:
+	Shift + alt + f

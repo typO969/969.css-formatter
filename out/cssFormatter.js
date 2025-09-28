@@ -55,10 +55,10 @@ function format(document, range, options) {
         indent_size: tabSize,
         indent_char: options.get("insertSpaces", true) ? ' ' : '\t',
         end_with_newline: includesEnd && options.get("insertFinalNewline", false),
-        selector_separator_newline: options.get("newlineBetweenSelectors", true),
-        newline_between_rules: options.get("newlineBetweenRules", true),
-        space_around_selector_separator: options.get("spaceAroundSelectorSeparator", false),
-        brace_style: 'collapse,preserve-inline', // Keep single-property rules on one line
+        //selector_separator_newline: options.get<boolean>("newlineBetweenSelectors", true),
+        //newline_between_rules: options.get<boolean>("newlineBetweenRules", true),
+        //space_around_selector_separator: options.get<boolean>("spaceAroundSelectorSeparator", false),
+        brace_style: 'collapse,preserve-inline', // Collapse blocks but keep inline rules intact
         indent_empty_lines: options.get("indentEmptyLines", false),
         max_preserve_newlines: 2, // Preserve up to 2 blank lines
         preserve_newlines: true, // Always preserve newlines

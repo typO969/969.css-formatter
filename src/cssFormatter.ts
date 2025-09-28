@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { css as css_beautify, JSBeautifyOptions } from 'js-beautify';
 
+type CssBeautifyOptions = Omit<JSBeautifyOptions, 'brace_style'> & {
+    brace_style?: JSBeautifyOptions['brace_style'] | 'collapse,preserve-inline';
+};
+
 export function format(
     document: vscode.TextDocument,
     range: vscode.Range | undefined,
@@ -22,14 +26,14 @@ export function format(
     value = value.replace(/([^\n])\n\/\*/g, '$1\n\n/*');
 
     // Apply formatting options
-    const cssOptions: JSBeautifyOptions = {
+    const cssOptions: CssBeautifyOptions = {
         indent_size: tabSize,
         indent_char: options.get<boolean>("insertSpaces", true) ? ' ' : '\t',
         end_with_newline: includesEnd && options.get<boolean>("insertFinalNewline", false),
-        selector_separator_newline: options.get<boolean>("newlineBetweenSelectors", true),
-        newline_between_rules: options.get<boolean>("newlineBetweenRules", true),
-        space_around_selector_separator: options.get<boolean>("spaceAroundSelectorSeparator", false),
-        brace_style: 'collapse,preserve-inline', // Keep single-property rules on one line
+        //selector_separator_newline: options.get<boolean>("newlineBetweenSelectors", true),
+        //newline_between_rules: options.get<boolean>("newlineBetweenRules", true),
+        //space_around_selector_separator: options.get<boolean>("spaceAroundSelectorSeparator", false),
+    brace_style: 'collapse,preserve-inline', // Collapse blocks but keep inline rules intact
         indent_empty_lines: options.get<boolean>("indentEmptyLines", false),
         max_preserve_newlines: 2, // Preserve up to 2 blank lines
         preserve_newlines: true, // Always preserve newlines

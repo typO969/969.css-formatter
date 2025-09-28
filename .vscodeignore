@@ -1,0 +1,32 @@
+# Ignore all node_modules except the required ones
+node_modules/*
+!node_modules/vscode-css-languageservice
+!node_modules/js-beautify
+
+# Ignore TypeScript source files (keep only compiled code)
+src/*
+tsconfig.json
+
+# Ignore unnecessary VSCode files
+.vscode/*
+*.log
+
+
+# Exclude dev/build stuff
+node_modules/**
+out/test/**
+src/**
+.vscode/**
+.git/**
+.github/**
+.vscode-test/**
+*.vsix
+npm-debug.log
+yarn.lock
+package-lock.json
+
+# Keep only what's needed
+!out/**          # compiled JS output
+!package.json    # extension metadata
+!README.md
+!LICENSE*

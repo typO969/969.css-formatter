@@ -1,0 +1,21 @@
+# Exclude source code, tests, and configuration from the packaged extension
+.vscode/**
+.vscode-test/**
+src/**
+tsconfig.json
+.gitignore
+.vscodeignore
+*.vsix
+*.loggit add -f out
+
+
+# KEEP only the compiled JS and required distribution files
+!out
+!out/*
+!out/**
+!out/extension.js
+!out/cssFormatter.js
+!package.json
+!README.md
+!readme.md
+!LICENSE*

@@ -37,11 +37,39 @@ exports.format = format;
 const vscode = __importStar(require("vscode"));
 const js_beautify_1 = require("js-beautify");
 /**
- * Intelligent Single-Declaration Collapser
- * - Tracks quotes ("...", '...') so semicolons in data URIs and strings are not split
- * - Tracks block comments (/* ... *\/) so braces/semicolons in comments are ignored
- * - Recursively processes nested blocks (@media, @supports, @layer, nesting)
- * - Safely collapses rules with exactly 1 declaration into a clean single line
+ * Combines multi-line comma-separated selector lists into a clean single line
+ * while preserving leading comments and indentation.
+ */
+function cleanSelectorPart(selectorPart) {
+    let commentPrefix = '';
+    let rem = selectorPart;
+    const commentMatch = rem.match(/^([\s\S]*?\*\/)([ \t]*\r?\n[ \t]*)/);
+    if (commentMatch) {
+        commentPrefix = commentMatch[1] + commentMatch[2];
+        rem = rem.slice(commentMatch[0].length);
+    }
+    else {
+        const leadingMatch = rem.match(/^(\r?\n[ \t]*)/);
+        if (leadingMatch) {
+            commentPrefix = leadingMatch[1];
+            rem = rem.slice(leadingMatch[0].length);
+        }
+    }
+    const indentMatch = rem.match(/^([ \t]*)/);
+    const indent = indentMatch ? indentMatch[1] : '';
+    const lines = rem.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) {
+        return selectorPart.replace(/[ \t]+$/, '');
+    }
+    const joined = lines.join(' ').replace(/\s*,\s*/g, ', ');
+    return (commentPrefix ? commentPrefix : '') + indent + joined;
+}
+/**
+ * Intelligent CSS Formatter Post-Processor
+ * - Combines comma-separated selector lists across multiple lines into a single line
+ * - Collapses single-declaration blocks into one line
+ * - Preserves multi-declaration blocks formatted across multiple lines
+ * - Handles quotes, data URIs, and at-rules
  */
 function collapseSingleDeclarationsSafe(css) {
     let result = '';
@@ -103,14 +131,15 @@ function collapseSingleDeclarationsSafe(css) {
             break;
         }
         const closeBrace = j;
-        const selectorPart = css.slice(i, openBrace);
+        const rawSelector = css.slice(i, openBrace);
         const body = css.slice(openBrace + 1, closeBrace);
         if (hasNestedBlock) {
-            result += selectorPart + '{' + collapseSingleDeclarationsSafe(body) + '}';
+            const cleanedSel = cleanSelectorPart(rawSelector);
+            result += cleanedSel + ' {' + collapseSingleDeclarationsSafe(body) + '}';
             i = closeBrace + 1;
             continue;
         }
-        const trimmedSelector = selectorPart.trim();
+        const trimmedSelector = rawSelector.trim();
         const isContainerAtRule = /^@(media|supports|layer|keyframes|document|container)\b/i.test(trimmedSelector);
         let declCount = 0;
         let inBodyComment = false;
@@ -159,17 +188,18 @@ function collapseSingleDeclarationsSafe(css) {
         if (hasColon && nonCommentText.length > 0) {
             declCount++;
         }
+        // Clean & combine the selector list onto a single line
+        const cleanedSel = cleanSelectorPart(rawSelector);
         if (declCount === 1 && !isContainerAtRule) {
             const cleanedBody = body
                 .split('\n')
                 .map(l => l.trim())
                 .filter(Boolean)
                 .join(' ');
-            const trimmedSel = selectorPart.replace(/[ \t]+$/, '');
-            result += trimmedSel + ' { ' + cleanedBody + ' }';
+            result += cleanedSel + ' { ' + cleanedBody + ' }';
         }
         else {
-            result += selectorPart + '{' + body + '}';
+            result += cleanedSel + ' {' + body + '}';
         }
         i = closeBrace + 1;
     }
@@ -201,7 +231,6 @@ function format(document, range, formattingOptions, editorConfig) {
         range = new vscode.Range(new vscode.Position(0, 0), document.positionAt(value.length));
     }
     // Precision comment spacing: Only add blank lines before comments when preceded by a closing rule brace '}'
-    // This prevents breaking consecutive header comments or injecting unwanted gaps inside blocks.
     value = value.replace(/\}[ \t]*\r?\n(?!\r?\n)[ \t]*\/\*/g, '}\n\n/*');
     // Apply formatting options (keeping archived configuration options intact)
     const cssOptions = {
@@ -221,7 +250,7 @@ function format(document, range, formattingOptions, editorConfig) {
         eol: '\n'
     };
     let result = (0, js_beautify_1.css)(value, cssOptions);
-    // Post-processing: Collapse single declaration blocks and clamp blank lines
+    // Post-processing: Combine selectors, collapse single declaration blocks, and clamp blank lines
     result = collapseSingleDeclarationsSafe(result);
     const maxBlankLines = editorConfig.get("maxPreserveNewlines", 2);
     result = clampBlankLines(result, maxBlankLines);

@@ -1,7 +1,7 @@
 {
   "name": "nsn-css-formatter",
   "displayName": "969 CSS Formatter",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "A custom CSS formatter with enhanced spacing and line preservation.",
   "main": "./out/extension.js",
   "publisher": "typo969",

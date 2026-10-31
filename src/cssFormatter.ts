@@ -18,7 +18,7 @@ function cleanSelectorPart(selectorPart: string): string {
         commentPrefix = commentMatch[1] + commentMatch[2];
         rem = rem.slice(commentMatch[0].length);
     } else {
-        const leadingMatch = rem.match(/^(\r?\n[ \t]*)/);
+        const leadingMatch = rem.match(/^((?:\r?\n[ \t]*)+)/);
         if (leadingMatch) {
             commentPrefix = leadingMatch[1];
             rem = rem.slice(leadingMatch[0].length);
@@ -33,8 +33,67 @@ function cleanSelectorPart(selectorPart: string): string {
         return selectorPart.replace(/[ \t]+$/, '');
     }
 
-    const joined = lines.join(' ').replace(/\s*,\s*/g, ', ');
+    const joined = normalizeSelectorCommas(lines.join(' '));
     return (commentPrefix ? commentPrefix : '') + indent + joined;
+}
+
+function normalizeSelectorCommas(text: string): string {
+    let normalized = '';
+    let quote: string | null = null;
+    let inComment = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+
+        if (inComment) {
+            normalized += ch;
+            if (ch === '*' && next === '/') {
+                normalized += next;
+                i++;
+                inComment = false;
+            }
+            continue;
+        }
+
+        if (!quote && ch === '/' && next === '*') {
+            normalized += ch + next;
+            i++;
+            inComment = true;
+            continue;
+        }
+
+        if (ch === '\\') {
+            normalized += ch;
+            if (i + 1 < text.length) {
+                normalized += text[++i];
+            }
+            continue;
+        }
+
+        if (quote) {
+            normalized += ch;
+            if (ch === quote) {
+                quote = null;
+            }
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            normalized += ch;
+        } else if (ch === ',') {
+            normalized = normalized.replace(/[ \t\r\n]+$/, '');
+            normalized += ', ';
+            while (i + 1 < text.length && /[ \t\r\n]/.test(text[i + 1])) {
+                i++;
+            }
+        } else {
+            normalized += ch;
+        }
+    }
+
+    return normalized;
 }
 
 /**

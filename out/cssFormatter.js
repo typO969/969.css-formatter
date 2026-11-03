@@ -49,7 +49,7 @@ function cleanSelectorPart(selectorPart) {
         rem = rem.slice(commentMatch[0].length);
     }
     else {
-        const leadingMatch = rem.match(/^((?:\r?\n[ \t]*)+)/);
+        const leadingMatch = rem.match(/^(\r?\n[ \t]*)/);
         if (leadingMatch) {
             commentPrefix = leadingMatch[1];
             rem = rem.slice(leadingMatch[0].length);
@@ -61,61 +61,8 @@ function cleanSelectorPart(selectorPart) {
     if (lines.length <= 1) {
         return selectorPart.replace(/[ \t]+$/, '');
     }
-    const joined = normalizeSelectorCommas(lines.join(' '));
+    const joined = lines.join(' ').replace(/\s*,\s*/g, ', ');
     return (commentPrefix ? commentPrefix : '') + indent + joined;
-}
-function normalizeSelectorCommas(text) {
-    let normalized = '';
-    let quote = null;
-    let inComment = false;
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        const next = text[i + 1];
-        if (inComment) {
-            normalized += ch;
-            if (ch === '*' && next === '/') {
-                normalized += next;
-                i++;
-                inComment = false;
-            }
-            continue;
-        }
-        if (!quote && ch === '/' && next === '*') {
-            normalized += ch + next;
-            i++;
-            inComment = true;
-            continue;
-        }
-        if (ch === '\\') {
-            normalized += ch;
-            if (i + 1 < text.length) {
-                normalized += text[++i];
-            }
-            continue;
-        }
-        if (quote) {
-            normalized += ch;
-            if (ch === quote) {
-                quote = null;
-            }
-            continue;
-        }
-        if (ch === '"' || ch === "'") {
-            quote = ch;
-            normalized += ch;
-        }
-        else if (ch === ',') {
-            normalized = normalized.replace(/[ \t\r\n]+$/, '');
-            normalized += ', ';
-            while (i + 1 < text.length && /[ \t\r\n]/.test(text[i + 1])) {
-                i++;
-            }
-        }
-        else {
-            normalized += ch;
-        }
-    }
-    return normalized;
 }
 /**
  * Intelligent CSS Formatter Post-Processor
@@ -241,7 +188,6 @@ function collapseSingleDeclarationsSafe(css) {
         if (hasColon && nonCommentText.length > 0) {
             declCount++;
         }
-        // Clean & combine the selector list onto a single line
         const cleanedSel = cleanSelectorPart(rawSelector);
         if (declCount === 1 && !isContainerAtRule) {
             const cleanedBody = body
@@ -259,6 +205,35 @@ function collapseSingleDeclarationsSafe(css) {
     return result;
 }
 /**
+ * Collects inline comments that trail code on the same line in the source CSS.
+ */
+function collectTrailingComments(source) {
+    const counts = new Map();
+    const lines = source.split(/\r?\n/);
+    for (const line of lines) {
+        const match = line.match(/^(.+?)[ \t]+(\/\*[\s\S]*?\*\/)[ \t]*$/);
+        if (match && match[1].trim().length > 0 && !match[1].trim().startsWith('/*')) {
+            const comment = match[2].trim();
+            counts.set(comment, (counts.get(comment) || 0) + 1);
+        }
+    }
+    return counts;
+}
+/**
+ * Re-attaches trailing comments to the preceding statement (after ; or }).
+ */
+function reattachTrailingComments(formattedCss, trailingComments) {
+    return formattedCss.replace(/([;}])[ \t]*\r?\n[ \t]*(\/\*[\s\S]*?\*\/)/g, (match, punct, comment) => {
+        const trimmedComment = comment.trim();
+        const count = trailingComments.get(trimmedComment) || 0;
+        if (count > 0) {
+            trailingComments.set(trimmedComment, count - 1);
+            return `${punct}    ${trimmedComment}`;
+        }
+        return match;
+    });
+}
+/**
  * Clamps consecutive blank lines to the allowed maximum.
  */
 function clampBlankLines(css, maxBlankLines = 2) {
@@ -272,6 +247,8 @@ function clampBlankLines(css, maxBlankLines = 2) {
 function format(document, range, formattingOptions, editorConfig) {
     let value = document.getText();
     let includesEnd = true;
+    // Track comments that were originally inline/trailing on the same line
+    const trailingCommentCounts = collectTrailingComments(value);
     // Use document-specific formatting options when available, falling back to workspace config
     let tabSize = formattingOptions?.tabSize ?? editorConfig.get("tabSize", 4);
     let insertSpaces = formattingOptions?.insertSpaces ?? editorConfig.get("insertSpaces", true);
@@ -283,8 +260,6 @@ function format(document, range, formattingOptions, editorConfig) {
     else {
         range = new vscode.Range(new vscode.Position(0, 0), document.positionAt(value.length));
     }
-    // Precision comment spacing: Only add blank lines before comments when preceded by a closing rule brace '}'
-    value = value.replace(/\}[ \t]*\r?\n(?!\r?\n)[ \t]*\/\*/g, '}\n\n/*');
     // Apply formatting options (keeping archived configuration options intact)
     const cssOptions = {
         indent_size: tabSize,
@@ -293,6 +268,7 @@ function format(document, range, formattingOptions, editorConfig) {
         selector_separator_newline: false,
         //selector_separator_newline: editorConfig.get<boolean>("newlineBetweenSelectors", true),
         //newline_between_rules: editorConfig.get<boolean>("newlineBetweenRules", true),
+        newline_between_rules: false, // Prevents mandatory carriage return between every element
         space_around_selector_separator: true,
         //space_around_selector_separator: editorConfig.get<boolean>("spaceAroundSelectorSeparator", false),
         brace_style: 'collapse,preserve-inline', // Collapse blocks but keep inline rules intact
@@ -303,8 +279,9 @@ function format(document, range, formattingOptions, editorConfig) {
         eol: '\n'
     };
     let result = (0, js_beautify_1.css)(value, cssOptions);
-    // Post-processing: Combine selectors, collapse single declaration blocks, and clamp blank lines
+    // Post-processing: Combine selectors, collapse single declaration blocks, and re-attach trailing comments
     result = collapseSingleDeclarationsSafe(result);
+    result = reattachTrailingComments(result, trailingCommentCounts);
     const maxBlankLines = editorConfig.get("maxPreserveNewlines", 2);
     result = clampBlankLines(result, maxBlankLines);
     // If result is identical to original, return empty array to prevent dirtying the document buffer

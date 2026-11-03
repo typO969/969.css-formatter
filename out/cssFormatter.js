@@ -38,11 +38,52 @@ const vscode = __importStar(require("vscode"));
 const js_beautify_1 = require("js-beautify");
 /**
  * Combines multi-line comma-separated selector lists into a clean single line
- * while preserving leading comments and indentation.
+ * while preserving leading comments, indentation, and top-level statements like @charset and @import.
  */
-function cleanSelectorPart(selectorPart) {
+function cleanSelectorPart(rawSelector) {
+    // Separate any preceding top-level statements ending in ";" (like @charset or @import)
+    let lastSemi = -1;
+    let inString = null;
+    let inComment = false;
+    for (let k = 0; k < rawSelector.length; k++) {
+        const ch = rawSelector[k];
+        const next = rawSelector[k + 1];
+        if (inComment) {
+            if (ch === '*' && next === '/') {
+                inComment = false;
+                k++;
+            }
+        }
+        else if (inString) {
+            if (ch === '\\') {
+                k++;
+            }
+            else if (ch === inString) {
+                inString = null;
+            }
+        }
+        else {
+            if (ch === '/' && next === '*') {
+                inComment = true;
+                k++;
+            }
+            else if (ch === '"' || ch === "'") {
+                inString = ch;
+            }
+            else if (ch === ';') {
+                lastSemi = k;
+            }
+        }
+    }
+    let prefix = '';
+    let selector = rawSelector;
+    if (lastSemi !== -1) {
+        prefix = rawSelector.slice(0, lastSemi + 1);
+        selector = rawSelector.slice(lastSemi + 1);
+    }
+    // In the actual selector, combine multi-line comma-separated selector lists
     let commentPrefix = '';
-    let rem = selectorPart;
+    let rem = selector;
     const commentMatch = rem.match(/^([\s\S]*?\*\/)([ \t]*\r?\n[ \t]*)/);
     if (commentMatch) {
         commentPrefix = commentMatch[1] + commentMatch[2];
@@ -57,12 +98,15 @@ function cleanSelectorPart(selectorPart) {
     }
     const indentMatch = rem.match(/^([ \t]*)/);
     const indent = indentMatch ? indentMatch[1] : '';
-    const lines = rem.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length <= 1) {
-        return selectorPart.replace(/[ \t]+$/, '');
+    // Only combine if it contains a comma (a multi-line selector list)
+    if (rem.includes(',')) {
+        const lines = rem.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length > 1) {
+            const joined = lines.join(' ').replace(/\s*,\s*/g, ', ');
+            return prefix + (commentPrefix ? commentPrefix : "") + indent + joined;
+        }
     }
-    const joined = lines.join(' ').replace(/\s*,\s*/g, ', ');
-    return (commentPrefix ? commentPrefix : '') + indent + joined;
+    return prefix + selector.replace(/[ \t]+$/, '');
 }
 /**
  * Intelligent CSS Formatter Post-Processor
